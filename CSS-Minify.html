@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSS Minify Tool</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/css/css.min.js"></script>
+  <style>
+html,body{margin:0;height:100%;display:flex;flex-direction:column;font-family:system-ui, sans-serif;overflow:hidden; background: #f8f7f6;}
+.editor-container{display:flex;flex:1;width:100%;overflow:hidden}
+.area{flex:1;display:flex;flex-direction:column;padding:5px;width:50%;height:100%;overflow-y:auto;box-sizing:border-box;}
+textarea{flex:1;border:1px solid #d0c4ff;padding:10px;font-family:monospace;font-size:13px;resize:none;outline:none;border-radius:20px;background:#fff;color:#1a1c1e}
+.controls{display:flex;justify-content:space-evenly;align-items:center;gap:8px;padding:10px;}
+.controls-left,.controls-center,.controls-right{display:flex;gap:8px}
+button{background:transparent; border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px; border: 1.5px solid #ddd; font-family: inherit;}
+button:hover{background:aquamarine}
+.controls-left button,.controls-right button{background: white;color: #0b57d0;}
+.muted{}
+.selected{background:aquamarine;box-shadow:rgba(0,0,0,.24)0 3px 8px}
+.copyok{color:#00c4b4;font-weight:600;margin-left:6px}
+.material-icons-outlined{font-size:16px}
+.CodeMirror{flex:1;border-radius:12px;border:1.5px solid #e8e8e8;height:100%;background:white; }
+.cm-s-vivid-light .CodeMirror{background:#fdfcff;color:#1a1c1e;caret-color:#ff4fa3;font-family:monospace;border-radius:10px}
+.cm-s-vivid-light .CodeMirror-gutters{background:#fff;color:#79747e;border:none}
+.cm-s-vivid-light .CodeMirror-linenumber{color:#a9a4b5}
+.cm-s-vivid-light .CodeMirror-selected{background:rgba(179,157,219,.35)!important}
+.cm-s-vivid-light .CodeMirror-activeline-background{background:rgba(103,80,164,.15)}
+.cm-s-vivid-light .cm-comment{color:#316c52;font-style:italic}
+.cm-s-vivid-light .cm-keyword{color:#6750a4;font-weight:bold}
+.cm-s-vivid-light .cm-atom{color:#7d5260}
+.cm-s-vivid-light .cm-number{color:#ff4fa3}
+.cm-s-vivid-light .cm-property{color:#006e6b}
+.cm-s-vivid-light .cm-variable{color:#625b71}
+.cm-s-vivid-light .cm-variable-2{color:#ff6f61}
+.cm-s-vivid-light .cm-variable-3{color:#2e7d32}
+.cm-s-vivid-light .cm-def{color:#1e88e5}
+.cm-s-vivid-light .cm-string{color:#c41c00}
+.cm-s-vivid-light .cm-bracket{color:#00695c;font-weight:bold}
+.cm-s-vivid-light .cm-tag{color:#2e7d32}
+.cm-s-vivid-light .cm-attribute{color:#ff6f61}
+.cm-s-vivid-light .cm-qualifier{color:#1a73e8}
+.cm-s-vivid-light .cm-link{color:#0b57d0;text-decoration:underline}
+.cm-s-vivid-light .cm-error{color:#ba1a1a;font-weight:bold}
+
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <div class="controls-left">
+      <button class="muted" onclick="pasteCss()">
+        <span class="material-icons-outlined">paste</span>
+      </button>
+      <button class="muted" onclick="clearAll()">
+        <span class="material-icons-outlined">delete</span>
+      </button>
+    </div>
+    <div class="controls-center">
+      <button id="tinyBtn" class="muted" onclick="setMode('tiny')">Tiny</button>
+      <button id="miniBtn" class="muted selected" onclick="setMode('mini')">Mini</button>
+      <button id="tidyBtn" class="muted" onclick="setMode('tidy')">Tidy</button>
+      <button id="prettyBtn" class="muted" onclick="setMode('pretty')">Pretty</button>
+    </div>
+    <div class="controls-right">
+      <button id="copyBtn" class="muted" onclick="copyCss()">
+        <span id="copyIcon" class="material-icons-outlined">content_copy</span>
+      </button>
+      <button class="muted" onclick="downloadCss()">
+        <span class="material-icons-outlined">download</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="editor-container">
+    <div class="area">
+      <textarea id="input" placeholder="Write CSS here..."></textarea>
+    </div>
+    <div class="area">
+      <textarea id="output" readonly placeholder="Result will appear here"></textarea>
+    </div>
+  </div>
+
+  <script>
+    var inputEditor = CodeMirror.fromTextArea(document.getElementById("input"), { mode: "css", theme: "vivid-light", lineNumbers: true, lineWrapping: true });
+    var outputEditor = CodeMirror.fromTextArea(document.getElementById("output"), { mode: "css", theme: "vivid-light", lineNumbers: true, lineWrapping: true, readOnly: true });
+    var currentMode = 'mini';
+
+    function removeComments(c) { return c.replace(/\/\*[\s\S]*?\*\//g, ''); }
+    function normalizeColonSpace(d) { return d.split(':').map(p => p.trim()).join(': '); }
+    function minifyCss(r) {
+      if (!r) return '';
+      let c = removeComments(r).trim(), parts = c.split('}'), rules = [];
+      for (let p of parts) {
+        if (!p.trim()) continue;
+        let i = p.indexOf('{');
+        if (i == -1) continue;
+        let s = p.slice(0, i).trim().replace(/\s+/g, ' '), b = p.slice(i + 1).trim().replace(/\{+/g, ''),
+            d = b.split(';').map(x => x.trim()).filter(x => x), cl = d.map(normalizeColonSpace),
+            j = cl.join('; ');
+        rules.push(`${s} { ${j} }`);
+      }
+      return rules.join(' ');
+    }
+    function tidyFormatting(r, l = true) {
+      let m = minifyCss(r), parts = m.split('}').map(p => p.trim()).filter(p => p);
+      return parts.map(p => p + ' }').join(l ? '\n\n' : '\n');
+    }
+    function prettyFormat(r) {
+      let c = removeComments(r).trim(), parts = c.split('}'), rules = [];
+      for (let p of parts) {
+        if (!p.trim()) continue;
+        let i = p.indexOf('{');
+        if (i == -1) continue;
+        let s = p.slice(0, i).trim().replace(/\s+/g, ' '),
+            b = p.slice(i + 1).trim().replace(/\{+/g, ''), d = b.split(';').map(x => x.trim()).filter(x => x),
+            cl = d.map(normalizeColonSpace), j = cl.join(';\n ');
+        rules.push(`${s} {\n ${j}\n}`);
+      }
+      return rules.join('\n\n');
+    }
+
+    function updateOutput() {
+      if (currentMode === 'tiny') tinyCss();
+      else if (currentMode === 'mini') miniCss();
+      else if (currentMode === 'tidy') tidyCss();
+      else if (currentMode === 'pretty') prettyCss();
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.controls-center button').forEach(btn => {
+        btn.classList.add('muted');
+        btn.classList.remove('selected');
+      });
+      document.getElementById(`${mode}Btn`).classList.remove('muted');
+      document.getElementById(`${mode}Btn`).classList.add('selected');
+      updateOutput();
+    }
+
+    function tinyCss() { outputEditor.setValue(minifyCss(inputEditor.getValue())); }
+    function miniCss() { outputEditor.setValue(tidyFormatting(inputEditor.getValue(), false)); }
+    function tidyCss() { outputEditor.setValue(tidyFormatting(inputEditor.getValue(), true)); }
+    function prettyCss() { outputEditor.setValue(prettyFormat(inputEditor.getValue())); }
+    function clearAll() {
+      inputEditor.setValue('');
+      outputEditor.setValue('');
+      resetCopyIcon();
+    }
+    function pasteCss() {
+      navigator.clipboard.readText().then(t => {
+        inputEditor.setValue(t);
+        updateOutput();
+      }).catch(e => alert('Failed: ' + e));
+    }
+    
+    function resetCopyIcon() {
+      const copyIcon = document.getElementById('copyIcon');
+      copyIcon.textContent = 'content_copy';
+      copyIcon.style.color = '';
+    }
+    
+    function copyCss() {
+      navigator.clipboard.writeText(outputEditor.getValue() || '').then(() => {
+        const copyIcon = document.getElementById('copyIcon');
+        copyIcon.textContent = 'check';
+        copyIcon.style.color = '#34d399';
+        setTimeout(resetCopyIcon, 1200);
+      });
+    }
+    
+    function downloadCss() {
+      let u = URL.createObjectURL(new Blob([outputEditor.getValue() || ''], { type: 'text/css' }));
+      let a = document.createElement('a');
+      a.href = u;
+      a.download = 'style.css';
+      a.click();
+      URL.revokeObjectURL(u);
+    }
+
+    inputEditor.on('change', updateOutput);
+    window.onload = () => {
+      document.getElementById('miniBtn').classList.remove('muted');
+      document.getElementById('miniBtn').classList.add('selected');
+      updateOutput();
+      inputEditor.focus();
+    };
+  </script>
+</body>
+</html>
